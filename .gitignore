@@ -1,0 +1,5 @@
+output/
+datasets/
+*.pkl
+*.pyc
+*.png
