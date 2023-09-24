@@ -66,7 +66,7 @@ def mnt_writer(mnt, image_name, image_size, file_name):
     f = open(file_name, 'w')
     f.write('%s\n'%(image_name))
     f.write('%d %d %d\n'%(mnt.shape[0], image_size[0], image_size[1]))
-    for i in xrange(mnt.shape[0]):
+    for i in range(mnt.shape[0]):
         f.write('%d %d %.6f\n'%(mnt[i,0], mnt[i,1], mnt[i,2]))
     f.close()
     return
@@ -89,14 +89,15 @@ def gabor_fn(ksize, sigma, theta, Lambda, psi, gamma):
     return gb_cos, gb_sin
 
 def gabor_bank(stride=2,Lambda=8):
-    filters_cos = np.ones([25,25,180/stride], dtype=float)
-    filters_sin = np.ones([25,25,180/stride], dtype=float)
-    for n, i in enumerate(xrange(-90,90,stride)):  
+    filters_cos = np.ones([25,25,180//stride], dtype=float)
+    filters_sin = np.ones([25,25,180//stride], dtype=float)
+    for n, i in enumerate(range(-90,90,stride)):  
         theta = i*np.pi/180.
         kernel_cos, kernel_sin = gabor_fn((24,24),4.5, -theta, Lambda, 0, 0.5)
         filters_cos[..., n] = kernel_cos
         filters_sin[..., n] = kernel_sin
     filters_cos = np.reshape(filters_cos,[25,25,1,-1])
+    print("filter",filters_cos.shape)
     filters_sin = np.reshape(filters_sin,[25,25,1,-1])
     return filters_cos, filters_sin
 
@@ -119,7 +120,7 @@ def gausslabel(length=180, stride=2):
     label = np.reshape(np.arange(stride/2, length, stride), [1,1,-1,1])
     y = np.reshape(np.arange(stride/2, length, stride), [1,1,1,-1])
     delta = np.array(np.abs(label - y), dtype=int)
-    delta = np.minimum(delta, length-delta)+length/2
+    delta = np.minimum(delta, length-delta)+length//2
     return gaussian_pdf[delta]
 
 def angle_delta(A, B, max_D=np.pi*2):
@@ -160,46 +161,9 @@ def nms(mnt):
     # cal distance
     inrange = distance(mnt_sort, mnt_sort, max_D=16, max_O=np.pi/6).astype(np.float32)
     keep_list = np.ones(mnt_sort.shape[0])
-    for i in xrange(mnt_sort.shape[0]):
+    for i in range(mnt_sort.shape[0]):
         if keep_list[i] == 0:
             continue
         keep_list[i+1:] = keep_list[i+1:]*(1-inrange[i, i+1:])
     return mnt_sort[keep_list.astype(np.bool), :]
 
-def draw_minutiae(image, minutiae, fname, r=15):
-    image = np.squeeze(image)
-    fig = plt.figure()
-    plt.imshow(image,cmap='gray')
-    plt.hold(True)
-    plt.plot(minutiae[:, 0], minutiae[:, 1], 'rs', fillstyle='none', linewidth=1)
-    for x, y, o in minutiae:
-        plt.plot([x, x+r*np.cos(o)], [y, y+r*np.sin(o)], 'r-')
-    plt.axis([0,image.shape[1],image.shape[0],0])
-    plt.axis('off')
-    plt.savefig(fname, bbox_inches='tight', pad_inches = 0)
-    plt.close(fig)
-    return
-
-def draw_ori_on_img(img, ori, mask, fname, coh=None, stride=16):
-    ori = np.squeeze(ori)
-    mask = np.squeeze(np.round(mask))
-    img = np.squeeze(img)
-    ori = ndimage.zoom(ori, np.array(img.shape)/np.array(ori.shape, dtype=float), order=0)
-    if mask.shape != img.shape:
-        mask = ndimage.zoom(mask, np.array(img.shape)/np.array(mask.shape, dtype=float), order=0)
-    if coh is None:
-        coh = np.ones_like(img)
-    fig = plt.figure()
-    plt.imshow(img,cmap='gray')
-    plt.hold(True)  
-    for i in xrange(stride,img.shape[0],stride):
-        for j in xrange(stride,img.shape[1],stride):
-            if mask[i, j] == 0:
-                continue
-            x, y, o, r = j, i, ori[i,j], coh[i,j]*(stride*0.9)
-            plt.plot([x, x+r*np.cos(o)], [y, y+r*np.sin(o)], 'r-')
-    plt.axis([0,img.shape[1],img.shape[0],0])
-    plt.axis('off')
-    plt.savefig(fname, bbox_inches='tight', pad_inches = 0)
-    plt.close(fig)            
-    return

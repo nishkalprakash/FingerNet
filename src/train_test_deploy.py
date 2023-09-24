@@ -1,7 +1,8 @@
 #coding=utf-8
+#%% Imports
 import os, sys, cv2, pickle
 from multiprocessing import Pool
-from functools import partial
+from functools import partial,reduce
 from time import time
 import matplotlib
 # Force matplotlib to not use any Xwindows backend.
@@ -16,39 +17,45 @@ from keras.models import Model
 from keras.layers import Input
 from keras.layers.core import Flatten,Activation,Lambda
 from keras.layers.convolutional import Conv2D,MaxPooling2D,UpSampling2D
-from keras.layers.normalization import BatchNormalization
-from keras.layers.advanced_activations import PReLU
+from tensorflow.keras.layers import BatchNormalization
+from keras.layers import PReLU
 from keras.regularizers import l2
 from keras.optimizers import SGD, Adam
 from keras.utils import plot_model
 from keras.callbacks import ModelCheckpoint  
-
+import tensorflow as tf
+#%% Arguments to the program
 import argparse
 parser = argparse.ArgumentParser(description='Train-Test-Deploy')
-parser.add_argument('GPU', type=str, default="4",
+parser.add_argument('GPU', type=str, default="1",
                     help='Your GPU ID')
 parser.add_argument('mode', type=str, default="train",
                     help='train-test, test or deploy')
-args = parser.parse_args()
+args = parser.parse_args("1 train".split())
 
 os.environ["CUDA_VISIBLE_DEVICES"]=args.GPU
-config = K.tf.ConfigProto(gpu_options=K.tf.GPUOptions(allow_growth=True))
-sess = K.tf.Session(config=config)
-K.set_session(sess)
+# config = tf.compat.v1.ConfigProto()
+# config.gpu_options.allow_growth=True
+# sess = tf.compat.v1.Session(config=config)
+
+# config = K.tf.compat.v1.ConfigProto(gpu_options=K.tf.GPUOptions(allow_growth=True))
+# sess = K.tf.compat.v1.Session(config=config)
+# K.set_session(sess)
 
 batch_size = 2
 use_multiprocessing = False
-
+#%% data training
 train_set = ['../datasets/CISL24218/',]
 train_sample_rate = None
 test_set = ['../datasets/NISTSD27/',]
-deploy_set = ['../datasets/NISTSD27/images/','../datasets/CISL24218/', \
-            '../datasets/FVC2002DB2A/','../datasets/NIST4/','../datasets/NIST14/']
+# deploy_set = ['../datasets/NISTSD27/images/','../datasets/CISL24218/', \
+#             '../datasets/FVC2002DB2A/','../datasets/NIST4/','../datasets/NIST14/']
+deploy_set = ['../datasets/FVC2002DB2A/',]
 pretrain = '../models/released_version/Model.model'
 output_dir = '../output/'+datetime.now().strftime('%Y%m%d-%H%M%S')
 logging = init_log(output_dir)
-copy_file(sys.path[0]+'/'+sys.argv[0], output_dir+'/')
-
+# copy_file(sys.path[0]+'/'+sys.argv[0], output_dir+'/')
+#%% function
 # image normalization
 def img_normalization(img_input, m0=0.0, var0=1.0):
     m = K.mean(img_input, axis=[1,2,3], keepdims=True)
@@ -56,7 +63,7 @@ def img_normalization(img_input, m0=0.0, var0=1.0):
     after = K.sqrt(var0*K.tf.square(img_input-m)/var)
     image_n = K.tf.where(K.tf.greater(img_input, m), m0+after, m0-after)
     return image_n
-
+#%% training
 # atan2 function
 def atan2(y_x):
     y, x = y_x[0], y_x[1]+K.epsilon()
@@ -111,29 +118,31 @@ def get_maximum_img_size_and_names(dataset, sample_rate=None):
         _, img_name_t = get_files_in_folder(folder+'images/', '.bmp')
         img_name.extend(img_name_t.tolist()*rate)
         folder_name.extend([folder]*img_name_t.shape[0]*rate)
-        img_size.append(np.array(misc.imread(folder+'images/'+img_name_t[0]+'.bmp', mode='L').shape))
+        img_size.append(np.array(cv2.imread(folder+'images/'+img_name_t[0]+'.bmp').shape))
     img_name = np.asarray(img_name)
     folder_name = np.asarray(folder_name)
     img_size = np.max(np.asarray(img_size), axis=0)
+    # print('img_size: ', img_size)
     # let img_size % 8 == 0
-    img_size = np.array(np.ceil(img_size/8)*8,dtype=np.int32)
+    # img_size = np.array(np.ceil(img_size/8)*8,dtype=np.int32)
+    
     return img_name, folder_name, img_size
 
 def sub_load_data(data, img_size, aug): 
     img_name, dataset = data
-    img = misc.imread(dataset+'images/'+img_name+'.bmp', mode='L')
-    seg = misc.imread(dataset+'seg_labels/'+img_name+'.png', mode='L')
+    img = cv2.imread(dataset+'images/'+img_name+'.bmp')
+    seg = cv2.imread(dataset+'seg_labels/'+img_name+'.png')   
+
     try:
-        ali = misc.imread(dataset+'ori_labels/'+img_name+'.bmp', mode='L')
+        ali = cv2.imread(dataset+'ori_labels/'+img_name+'.bmp')
     except:
         ali = np.zeros_like(img)
+    
     mnt = np.array(mnt_reader(dataset+'mnt_labels/'+img_name+'.mnt'), dtype=float)
     if any(img.shape != img_size):
+        # print(img.shape, img_size)
         # random pad mean values to reach required shape
-        if np.random.rand()<aug:
-            tra = np.int32(np.random.rand(2)*(np.array(img_size)-np.array(img.shape)))
-        else:
-            tra = np.int32(0.5*(np.array(img_size)-np.array(img.shape)))
+        tra = np.int32(np.random.rand(3) * (np.array(img_size) - np.array(img.shape))[:3])
         img_t = np.ones(img_size)*np.mean(img)
         seg_t = np.zeros(img_size)
         ali_t = np.ones(img_size)*np.mean(ali)
@@ -143,11 +152,25 @@ def sub_load_data(data, img_size, aug):
         img = img_t
         seg = seg_t
         ali = ali_t
-        mnt = mnt+np.array([tra[1],tra[0],0]) 
+        mnt = mnt+np.array([tra[1],tra[0],0])
+    #     if np.random.rand()<aug:           
+    #         tra = np.int32(np.random.rand(3) * (np.array(img_size) - np.array(img.shape))[:3])
+    #     else:
+    #         tra = np.int32(0.5*(np.array(img_size)-np.array(img.shape)))
+    #     img_t = np.ones(img_size)*np.mean(img)
+    #     seg_t = np.zeros(img_size)
+    #     ali_t = np.ones(img_size)*np.mean(ali)
+    #     img_t[tra[0]:tra[0]+img.shape[0],tra[1]:tra[1]+img.shape[1]] = img
+    #     seg_t[tra[0]:tra[0]+img.shape[0],tra[1]:tra[1]+img.shape[1]] = seg
+    #     ali_t[tra[0]:tra[0]+img.shape[0],tra[1]:tra[1]+img.shape[1]] = ali
+    #     img = img_t
+    #     seg = seg_t
+    #     ali = ali_t
+    #     mnt = mnt+np.array([tra[1],tra[0],0]) 
     if np.random.rand()<aug:
         # random rotation [0 - 360] & translation img_size / 4
         rot = np.random.rand() * 360
-        tra = (np.random.rand(2)-0.5) / 2 * img_size 
+        tra = (np.random.rand(3) - 0.5) / 2 * img_size
         img = ndimage.rotate(img, rot, reshape=False, mode='reflect')
         img = ndimage.shift(img, tra, mode='reflect')
         seg = ndimage.rotate(seg, rot, reshape=False, mode='constant')
@@ -173,27 +196,30 @@ def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1, sample_
     if batch_size > 1 and use_multiprocessing==True:
         p = Pool(batch_size)        
     p_sub_load_data = partial(sub_load_data, img_size=img_size, aug=aug)
-    for i in xrange(0,len(img_name), batch_size):
+    for i in range(0,len(img_name), batch_size):
         have_alignment = np.ones([batch_size, 1, 1, 1])
+        # print(batch_size, img_size[0], img_size[1] )
         image = np.zeros((batch_size, img_size[0], img_size[1], 1))
         segment = np.zeros((batch_size, img_size[0], img_size[1], 1))
         alignment = np.zeros((batch_size, img_size[0], img_size[1], 1))
-        minutiae_w = np.zeros((batch_size, img_size[0]/8, img_size[1]/8, 1))-1
-        minutiae_h = np.zeros((batch_size, img_size[0]/8, img_size[1]/8, 1))-1
-        minutiae_o = np.zeros((batch_size, img_size[0]/8, img_size[1]/8, 1))-1
-        batch_name = [img_name[(i+j)%len(img_name)] for j in xrange(batch_size)]
-        batch_f_name = [folder_name[(i+j)%len(img_name)] for j in xrange(batch_size)]
+        minutiae_w = np.zeros((batch_size, img_size[0]//8, img_size[1]//8, 1))-1
+        minutiae_h = np.zeros((batch_size, img_size[0]//8, img_size[1]//8, 1))-1
+        minutiae_o = np.zeros((batch_size, img_size[0]//8, img_size[1]//8, 1))-1
+        batch_name = [img_name[(i+j)%len(img_name)] for j in range(batch_size)]
+        batch_f_name = [folder_name[(i+j)%len(img_name)] for j in range(batch_size)]
         if batch_size > 1 and use_multiprocessing==True:    
             results = p.map(p_sub_load_data, zip(batch_name, batch_f_name))
         else:
-            results = map(p_sub_load_data, zip(batch_name, batch_f_name))
-        for j in xrange(batch_size):
+            results = list(map(p_sub_load_data, zip(batch_name, batch_f_name)))
+        for j in range(batch_size):
+            
             img, seg, ali, mnt = results[j]
+    
             if np.sum(ali) == 0:
                 have_alignment[j, 0, 0, 0] = 0
-            image[j, :, :, 0] = img / 255.0
-            segment[j, :, :, 0] = seg / 255.0
-            alignment[j, :, :, 0] = ali / 255.0
+            image[j, :, :, 0] = img[:, :, 0] / 255.0
+            segment[j, :, :, 0] = seg[:, :, 0] / 255.0
+            alignment[j, :, :, 0] = ali[:, :, 0] / 255.0
             minutiae_w[j, (mnt[:, 1]/8).astype(int), (mnt[:, 0]/8).astype(int), 0] = mnt[:, 0] % 8
             minutiae_h[j, (mnt[:, 1]/8).astype(int), (mnt[:, 0]/8).astype(int), 0] = mnt[:, 1] % 8
             minutiae_o[j, (mnt[:, 1]/8).astype(int), (mnt[:, 0]/8).astype(int), 0] = mnt[:, 2]
@@ -286,8 +312,9 @@ def conv_bn_prelu(bottom, w_size, name, strides=(1,1), dilation_rate=(1,1)):
     top=PReLU(alpha_initializer='zero', shared_axes=[1,2], name='prelu-'+name)(top)
     return top
 def get_main_net(input_shape=(512,512,1), weights_path=None):
-    img_input=Input(input_shape)
-    bn_img=Lambda(img_normalization, name='img_norm')(img_input)
+    img_input = tf.keras.Input(shape=(512, 512, 1))
+    
+    bn_img=Lambda(lambda x: img_normalization(x, m0=0.0, var0=1.0), name='img_norm')(img_input)
     # feature extraction VGG
     conv=conv_bn_prelu(bn_img, (64,3,3), '1_1') 
     conv=conv_bn_prelu(conv, (64,3,3), '1_2')
@@ -459,7 +486,7 @@ def mnt_s_loss(y_true, y_pred):
     logloss = -K.sum(logloss) / total_elements
     return logloss    
 
-# find highest peak using gaussian
+# # find highest peak using gaussian
 def ori_highest_peak(y_pred, length=180):
     glabel = gausslabel(length=length,stride=2).astype(np.float32)
     ori_gau = K.conv2d(y_pred,glabel,padding='same')
@@ -520,6 +547,7 @@ def mnt_mean_delta(y_true, y_pred):
     return mean_delta
 
 def train(input_shape=(512,512,1)):
+    print("train")
     img_name, folder_name, img_size = get_maximum_img_size_and_names(train_set, train_sample_rate)  
     main_net_model = get_main_net((img_size[0],img_size[1],1), pretrain)
     plot_model(main_net_model, to_file=output_dir+'/model.png',show_shapes=True)
@@ -536,7 +564,7 @@ def train(input_shape=(512,512,1)):
                  'mnt_w_out':[mnt_mean_delta,],
                  'mnt_h_out':[mnt_mean_delta,],
                  'mnt_s_out':[seg_acc_pos, seg_acc_neg, seg_acc_all]})
-    for epoch in range(100):
+    for epoch in range(1):
         for i, train in enumerate(load_data((img_name, folder_name, img_size), tra_ori_model, rand=True, aug=0.7, batch_size=batch_size)):
             loss = main_net_model.train_on_batch(train[0], 
                 {'ori_out_1':train[1], 'ori_out_2':train[2], 'seg_out':train[3],
@@ -563,7 +591,9 @@ def label2mnt(mnt_s_out, mnt_w_out, mnt_h_out, mnt_o_out, thresh=0.5):
     assert len(mnt_s_out.shape)==2 and len(mnt_w_out.shape)==3 and len(mnt_h_out.shape)==3 and len(mnt_o_out.shape)==3 
     # get cls results
     mnt_sparse = sparse.coo_matrix(mnt_s_out>thresh)
-    mnt_list = np.array(zip(mnt_sparse.row, mnt_sparse.col), dtype=np.int32)
+    print(mnt_sparse.row.shape)
+    print(mnt_sparse.col.shape)
+    mnt_list = np.array(list(zip(mnt_sparse.row, mnt_sparse.col)), dtype=np.int32)
     if mnt_list.shape[0] == 0:
         return np.zeros((0, 4))
     # get regression results
@@ -614,11 +644,11 @@ def test(test_set, model, outdir, test_num=10, draw=True):
                 p, r, f, l, o))
             ave_prf_nms.append([p, r, f, l, o])            
             if draw:                         
-                angval = sess.run(ori_highest_peak(ori_out_1))                           
+                angval = run(ori_highest_peak(ori_out_1))                           
                 angval = (np.argmax(angval, axis=-1)*2-90)/180.*np.pi
-                draw_ori_on_img(test[0], angval, seg_out, "%s%s_ori.png"%(outdir, test[8][0]))
-                draw_minutiae(test[0], mnt_nms[:,:3], "%s%s_mnt.png"%(outdir, test[8][0]))
-                draw_minutiae(test[0], mnt_gt[:,:3], "%s%s_mnt_gt.png"%(outdir, test[8][0]))
+                draw_ori_on_imgs(test[0], angval, seg_out, "%s%s_ori.png"%(outdir, test[8][0]))
+                draw_minutiaes(test[0], mnt_nms[:,:3], "%s%s_mnt.png"%(outdir, test[8][0]))
+                draw_minutiaes(test[0], mnt_gt[:,:3], "%s%s_mnt_gt.png"%(outdir, test[8][0]))
         else:
             break
     logging.info("Average testing results:")
@@ -628,27 +658,83 @@ def test(test_set, model, outdir, test_num=10, draw=True):
     logging.info("After_nms:\nprecision: %f\nrecall: %f\nf1-measure: %f\nlocation_dis: %f\norientation_delta:%f\n----------------\n"%(
                     ave_prf_nms[0],ave_prf_nms[1],ave_prf_nms[2],ave_prf_nms[3],ave_prf_nms[4]))     
     return
+#new addition
+
+def draw_minutiaes(image, minutiae, fname, r=15):
+    image = np.squeeze(image)
+    fig = plt.figure()
+    plt.imshow(image, cmap='gray')
+    
+
+    plt.plot(minutiae[:, 0], minutiae[:, 1], 'rs', fillstyle='none', linewidth=1)
+    for x, y, o in minutiae:
+        plt.plot([x, x + r * np.cos(o)], [y, y + r * np.sin(o)], 'r-')
+    plt.axis([0, image.shape[1], image.shape[0], 0])
+    plt.axis('off')
+    plt.savefig(fname, bbox_inches='tight', pad_inches=0)
+    plt.savefig('output1.png', bbox_inches='tight', pad_inches=0)
+    plt.show()  # Display the plot
+    plt.close(fig)
+
+def draw_ori_on_imgs(img, ori, mask, fname, coh=None, stride=16):
+    print("nafees")
+    ori = np.squeeze(ori)
+    mask = np.squeeze(np.round(mask))
+    img = np.squeeze(img)
+    plt.imshow(img, cmap='gray')
+    ori = ndimage.zoom(ori, np.array(img.shape) / np.array(ori.shape, dtype=float), order=0)
+    if mask.shape != img.shape:
+        mask = ndimage.zoom(mask, np.array(img.shape) / np.array(mask.shape, dtype=float), order=0)
+    if coh is None:
+        coh = np.ones_like(img)
+    fig = plt.figure()
+    plt.imshow(img, cmap='gray')
+    for i in range(stride, img.shape[0], stride):
+        for j in range(stride, img.shape[1], stride):
+            if mask[i, j] == 0:
+                continue
+            x, y, o, r = j, i, ori[i, j], coh[i, j] * (stride * 0.9)
+            plt.plot([x, x + r * np.cos(o)], [y, y + r * np.sin(o)], 'r-')
+    plt.axis([0, img.shape[1], img.shape[0], 0])
+    plt.axis('off')
+    plt.savefig(fname, bbox_inches='tight', pad_inches=0)
+    plt.savefig('output2.png', bbox_inches='tight', pad_inches=0)
+    plt.show()  # Display the plot
+    plt.close(fig)
+
 
 def deploy(deploy_set, set_name=None):
     if set_name is None:
         set_name = deploy_set.split('/')[-2]
     mkdir(output_dir+'/'+set_name+'/')
     logging.info("Predicting %s:"%(set_name)) 
-    _, img_name = get_files_in_folder(deploy_set, '.bmp')
+    _, img_name = get_files_in_folder(deploy_set, '.tif')
     if len(img_name) == 0:
         deploy_set = deploy_set+'images/'
-        _, img_name = get_files_in_folder(deploy_set, '.bmp')
-    img_size = misc.imread(deploy_set+img_name[0]+'.bmp', mode='L').shape
+        _, img_name = get_files_in_folder(deploy_set, '.tif')
+    img_size = cv2.imread(deploy_set+img_name[0]+'.tif').shape
     img_size = np.array(img_size, dtype=np.int32)/8*8      
     main_net_model = get_main_net((img_size[0],img_size[1],1), pretrain)
-    _, img_name = get_files_in_folder(deploy_set, '.bmp')
+    _, img_name = get_files_in_folder(deploy_set, '.tif')
     time_c = []
-    for i in xrange(0,len(img_name)):
+    for i in range(0,len(img_name)):
         logging.info("%s %d / %d: %s"%(set_name, i+1, len(img_name), img_name[i]))
-        time_start = time()    
-        image = misc.imread(deploy_set+img_name[i]+'.bmp', mode='L') / 255.0
-        image = image[:img_size[0],:img_size[1]]      
-        image = np.reshape(image,[1, image.shape[0], image.shape[1], 1])
+        time_start = time()  
+        #read image in grayscale
+        #  
+        image = cv2.imread(deploy_set+img_name[i]+'.tif',0) / 255.0
+      
+
+        image = image[:int(img_size[0]), :int(img_size[1])] 
+        print(image.shape) 
+        image = cv2.resize(image, (512, 512))
+        print(image.shape)
+        image = np.expand_dims(image, axis=-1)  
+        print(image.shape)
+        image = np.expand_dims(image, axis=0)  
+        print(image.shape)
+       
+        # image = np.reshape(image,[1, image.shape[0], image.shape[1], 1])
         enhance_img, ori_out_1, ori_out_2, seg_out, mnt_o_out, mnt_w_out, mnt_h_out, mnt_s_out = main_net_model.predict(image) 
         time_afterconv = time()
         round_seg = np.round(np.squeeze(seg_out))
@@ -656,14 +742,15 @@ def deploy(deploy_set, set_name=None):
         seg_out = cv2.morphologyEx(round_seg, cv2.MORPH_OPEN, kernel)
         mnt = label2mnt(np.squeeze(mnt_s_out)*np.round(np.squeeze(seg_out)), mnt_w_out, mnt_h_out, mnt_o_out, thresh=0.5)
         mnt_nms = nms(mnt)
-        ori = sess.run(ori_highest_peak(ori_out_1))                           
+        ori = (ori_highest_peak(ori_out_1))                           
         ori = (np.argmax(ori, axis=-1)*2-90)/180.*np.pi  
         time_afterpost = time()
         mnt_writer(mnt_nms, img_name[i], img_size, "%s/%s/%s.mnt"%(output_dir, set_name, img_name[i]))        
-        draw_ori_on_img(image, ori, np.ones_like(seg_out), "%s/%s/%s_ori.png"%(output_dir, set_name, img_name[i]))        
-        draw_minutiae(image, mnt_nms[:,:3], "%s/%s/%s_mnt.png"%(output_dir, set_name, img_name[i]))
-        misc.imsave("%s/%s/%s_enh.png"%(output_dir, set_name, img_name[i]), np.squeeze(enhance_img)*ndimage.zoom(np.round(np.squeeze(seg_out)), [8,8], order=0))
-        misc.imsave("%s/%s/%s_seg.png"%(output_dir, set_name, img_name[i]), ndimage.zoom(np.round(np.squeeze(seg_out)), [8,8], order=0)) 
+        draw_ori_on_imgs(image, ori, np.ones_like(seg_out), "%s/%s/%s_ori.png"%(output_dir, set_name, img_name[i]))        
+        draw_minutiaes(image, mnt_nms[:,:3], "%s/%s/%s_mnt.png"%(output_dir, set_name, img_name[i]))
+        
+        cv2.imwrite("%s/%s/%s_enh.png"%(output_dir, set_name, img_name[i]), np.squeeze(enhance_img)*ndimage.zoom(np.round(np.squeeze(seg_out)), [8,8], order=0))
+        cv2.imwrite("%s/%s/%s_seg.png"%(output_dir, set_name, img_name[i]), ndimage.zoom(np.round(np.squeeze(seg_out)), [8,8], order=0)) 
         io.savemat("%s/%s/%s.mat"%(output_dir, set_name, img_name[i]), {'orientation':ori, 'orientation_distribution_map':ori_out_1})
         time_afterdraw = time()
         time_c.append([time_afterconv-time_start, time_afterpost-time_afterconv, time_afterdraw-time_afterpost])
@@ -683,6 +770,17 @@ def main():
             deploy(folder, str(i))
     else:
         pass
-
+#%%
 if __name__ =='__main__':
+    # args
     main()
+    # train()
+    # for folder in test_set:
+    #     test([folder,], pretrain, output_dir+"/", test_num=258, draw=False) 
+    # for folder in deploy_set:
+    #     deploy(folder)
+
+
+
+
+# %%
