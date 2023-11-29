@@ -811,7 +811,7 @@ def deploy(deploy_set, set_name=None):
         time_c.append([time_afterconv-time_start, time_afterpost-time_afterconv, time_afterdraw-time_afterpost])
         logging.info("load+conv: %.3fs, seg-postpro+nms: %.3f, draw: %.3f"%(time_c[-1][0],time_c[-1][1],time_c[-1][2]))
     
-    serialized_dict = "\n".join([f"{key}: {value}" for key, value in features_dict.items()])
+    # serialized_dict = "\n".join([f"{key}: {value}" for key, value in features_dict.items()])
     import pickle
  
 

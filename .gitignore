@@ -3,3 +3,5 @@ datasets/
 *.pkl
 *.pyc
 *.png
+*.mat
+*.mnt
