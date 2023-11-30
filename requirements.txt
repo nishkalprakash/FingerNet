@@ -1,0 +1,9 @@
+opencv-python
+opencv-contrib-python
+keras
+scikit-learn
+matplotlib
+numpy
+ipykernel
+# optional
+pandas

@@ -165,5 +165,5 @@ def nms(mnt):
         if keep_list[i] == 0:
             continue
         keep_list[i+1:] = keep_list[i+1:]*(1-inrange[i, i+1:])
-    return mnt_sort[keep_list.astype(np.bool), :]
+    return mnt_sort[keep_list.astype(bool), :]
 
