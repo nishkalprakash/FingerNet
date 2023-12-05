@@ -43,7 +43,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]=args.GPU
 # K.set_session(sess)
 
 batch_size = 2
-use_multiprocessing = False
+use_multiprocessing = True
 #%% data training
 train_set = ['../datasets/CISL24218/',]
 train_sample_rate = None
@@ -51,6 +51,7 @@ test_set = ['../datasets/NISTSD27/',]
 # deploy_set = ['../datasets/NISTSD27/images/','../datasets/CISL24218/', \
 #             '../datasets/FVC2002DB2A/','../datasets/NIST4/','../datasets/NIST14/']
 deploy_set = ['Z:/fvc_fingerprint_datasets/FVC2002/Dbs/DB1_B/']
+deploy_set = ['D:/anguli_fingerprint_datasets/anguli_imagenet_splitted/']
 # deploy_set = ['../datasets/fvc2006_dbs_combined/',]
 pretrain = 'models/released_version/Model.model'
 output_dir = 'output/'+datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -706,8 +707,8 @@ def draw_minutiaes(image, minutiae, fname, r=15):
     plt.axis([0, image.shape[1], image.shape[0], 0])
     plt.axis('off')
     plt.savefig(fname, bbox_inches='tight', pad_inches=0)
-    plt.savefig('output1.png', bbox_inches='tight', pad_inches=0)
-    plt.show()  # Display the plot
+    # plt.savefig('output1.png', bbox_inches='tight', pad_inches=0)
+    # plt.show()  # Display the plot
     plt.close(fig)
 
 def draw_ori_on_imgs(img, ori, mask, fname, coh=None, stride=16):
@@ -732,8 +733,8 @@ def draw_ori_on_imgs(img, ori, mask, fname, coh=None, stride=16):
     plt.axis([0, img.shape[1], img.shape[0], 0])
     plt.axis('off')
     plt.savefig(fname, bbox_inches='tight', pad_inches=0)
-    plt.savefig('output2.png', bbox_inches='tight', pad_inches=0)
-    plt.show()  # Display the plot
+    # plt.savefig('output2.png', bbox_inches='tight', pad_inches=0)
+    # plt.show()  # Display the plot
     plt.close(fig)
 
 
@@ -798,7 +799,7 @@ def deploy(deploy_set, set_name=None):
         time_afterpost = time()
         mnt_writer(mnt_nms, img_name[i], img_size, "%s/%s/%s.mnt"%(output_dir, set_name, img_name[i]))        
         # draw_ori_on_imgs(image, ori, np.ones_like(seg_out), "%s/%s/%s_ori.png"%(output_dir, set_name, img_name[i]))        
-        draw_minutiaes(image, mnt_nms[:,:3], "%s/%s/%s_mnt.png"%(output_dir, set_name, img_name[i]))
+        # draw_minutiaes(image, mnt_nms[:,:3], "%s/%s/%s_mnt.png"%(output_dir, set_name, img_name[i]))
         
         # cv2.imwrite("%s/%s/%s_enh.png"%(output_dir, set_name, img_name[i]), np.squeeze(enhance_img)*ndimage.zoom(np.round(np.squeeze(seg_out)), [8,8], order=0))
         # cv2.imwrite("%s/%s/%s_seg.png"%(output_dir, set_name, img_name[i]), ndimage.zoom(np.round(np.squeeze(seg_out)), [8,8], order=0)) 
@@ -807,12 +808,12 @@ def deploy(deploy_set, set_name=None):
         time_c.append([time_afterconv-time_start, time_afterpost-time_afterconv, time_afterdraw-time_afterpost])
         logging.info("load+conv: %.3fs, seg-postpro+nms: %.3f, draw: %.3f"%(time_c[-1][0],time_c[-1][1],time_c[-1][2]))
     
-    serialized_dict = "\n".join([f"{key}: {value}" for key, value in features_dict.items()])
-    import pickle
+    # serialized_dict = "\n".join([f"{key}: {value}" for key, value in features_dict.items()])
+    # import pickle
  
 
-    with open("features_dict_fvc2006_db2a.pkl", "wb") as file:
-        pickle.dump(features_dict, file)
+    # with open("features_dict_fvc2006_db2a.pkl", "wb") as file:
+        # pickle.dump(features_dict, file)
     time_c = np.mean(np.array(time_c),axis=0)
     logging.info("Average: load+conv: %.3fs, oir-select+seg-post+nms: %.3f, draw: %.3f"%(time_c[0],time_c[1],time_c[2]))
     return  

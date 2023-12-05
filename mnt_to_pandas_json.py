@@ -5,27 +5,27 @@ import json
 import pandas as pd
 from pathlib import Path
 # read all mnt files
-# inp_path = r"output\20231129-181743\0"
-# out_path = r"output\FCV2002_DB1_B_fingernet.json"
-# path = Path(r"FVC2002\Dbs\DB1_B")
-# ext = ".tif"
-# # read all mnt files using pathlib
-# # mnt_files = []
-# js_dict_array = []
-# for file in Path(inp_path).glob('*.mnt'):
-#     js_dict = {'path':(path/f"{file.stem}{ext}").as_posix()}
-#     mnt_in = [list(map(float,i.split())) for i in file.read_text().strip().split('\n')[2:]]
-#     js_dict['mv'] = mnt_in
-#     js_dict_array.append(js_dict)
+inp_path = r"output\20231204-165138\0"
+out_path = r"output\anguli_10_100_fingernet.json"
+path = Path(r"anguli_10_100")
+ext = ".tiff"
+# read all mnt files using pathlib
+# mnt_files = []
+js_dict_array = []
+for file in Path(inp_path).glob('*.mnt'):
+    js_dict = {'path':(path/f"{file.stem}{ext}").as_posix()}
+    mnt_in = [list(map(float,i.split())) for i in file.read_text().strip().split('\n')[2:]]
+    js_dict['mv'] = mnt_in
+    js_dict_array.append(js_dict)
 
 # save it in json file
-# pd.DataFrame(js_dict_array).to_json(out_path, orient='records')
+pd.DataFrame(js_dict_array).to_json(out_path, orient='records')
 
 #%%
 # read json file
-in_json_path = r"output\FVC2002_DB1_B_minutia_net.json"
-df = pd.read_json(in_json_path, orient='records')
+# in_json_path = r"output\FVC2002_DB1_B_minutia_net.json"
+# df = pd.read_json(in_json_path, orient='records')
 
 # %%
-df.head()
+# df.head()
 # %%
