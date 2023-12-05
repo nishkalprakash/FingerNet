@@ -28,7 +28,7 @@ def init_log(output_dir):
         filename=os.path.join(output_dir, 'log.log'),
         filemode='w')
     console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
+    console.setLevel(logging.ERROR)
     logging.getLogger('').addHandler(console)
     return logging
 
