@@ -1,5 +1,6 @@
 output/
 !output/*.json
+# !output/anguli_2.5k_50k_fingernet.json
 datasets/
 *.pkl
 *.pyc
