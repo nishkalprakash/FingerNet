@@ -5,9 +5,10 @@ import json
 import pandas as pd
 from pathlib import Path
 # read all mnt files
-inp_path = r"output\20231204-165138\0"
-out_path = r"output\anguli_10_100_fingernet.json"
-path = Path(r"anguli_10_100")
+inp_path = r"output\20231205-203643\0"
+
+path = Path(r"anguli_2.5k_50k")
+out_path = f"output/{path}.json"
 ext = ".tiff"
 # read all mnt files using pathlib
 # mnt_files = []
